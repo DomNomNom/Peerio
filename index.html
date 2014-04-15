@@ -1,0 +1,78 @@
+<html>
+<body>
+
+ <div id="state">[not yet connected]</div>
+
+<button onclick="modifyPeriod(2.0);">
+  slower
+</button>
+<button onclick="modifyPeriod(0.5);">
+  faster
+</button>
+
+
+</body>
+<script src="http://code.jquery.com/jquery-latest.min.js"
+        type="text/javascript"></script>
+<script src="/socket.io/socket.io.js"></script>
+
+<script>
+  var master = io.connect('http://localhost:9000');
+  var targetHost = 'oscilator'
+  var oscilator = null;
+
+  var periodFactor = 1.0;
+
+
+  // we aren't going to register as a host. we just want the oscilators value
+
+  var peers = {};
+  master.on('connect', function () {
+    $('#state').html("connected to master");
+    master.emit('requestPeers', {});
+  });
+  master.on('replyPeers', function (data) {
+    $('#state').html('recieved peers');
+    peers = data;
+    if (targetHost in peers) {
+      oscilator = io.connect(peers[targetHost]);
+      oscilator.on('connect', function() {
+        oscilator.emit('subscribe', {name: 'state'});
+      });
+
+      oscilator.on('data', function (data) {
+        if (data.name == 'state') {
+          $('#state').html('<h1>' + data.value + '</h1>');
+        }
+        else {
+          console.log("I didn't subscribe to this variable: " + data.name);
+        }
+
+      });
+
+      oscilator.on('response_get', function (data) {
+        if (data.name == 'period') {
+          oscilator.emit('set', { period: data.value * periodFactor });
+        }
+        else {
+          console.log("I didn't get to this variable: " + data.name);
+        }
+      });
+
+    }
+    else {
+      console.error('My required host is not connected to the master: ' + targetHost);
+    }
+  });
+
+
+  // code for the buttons
+  function modifyPeriod(factor) {
+    periodFactor = factor;
+
+    oscilator.emit('get', {name: 'period'});
+  }
+
+</script>
+</html>
+
